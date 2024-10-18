@@ -1,0 +1,81 @@
+---
+title: "Snowcover vignette for PI Charter"
+author: "Mike Verhoeven"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+#To-do: 
+1. Snowcover effects on clp abund for all lakes where the DB has multiple CLP projects
+- non-local winter data
+- 
+
+2. Compare my results to old ones! Lake past, neighbors, watershed, state?
+
+
+# Prep WS
+```{r}
+#load libraries
+library(data.table)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(plotly)
+
+
+#import Data
+surveys <- fread("scripts&data/data/input/lake_year_data.csv")
+rawdata <- fread("scripts&data/data/input/PCRIsurveysPICharter2srt_sheet1rawdata.csv")
+  
+```
+
+
+#data explore
+```{r}
+#see if we can re-generate ray's calc'd CLP values
+head(rawdata)
+  rawdata[ , .N , .(SURVEY_START, DOW) ]
+  names(rawdata)[str_detect(names(rawdata), "pota")]
+  
+#alltime max vet depth 
+  
+  a <- rawdata[ , .("survey_ident"= .GRP, "totnsamp" = .N, "clpN" = sum(potamogeton_crispus >= 1, na.rm = T), "lat_median" = median(latitude, na.rm = T), "lon_median" = median(longitude, na.rm = T)) ,   , .(SURVEY_START, DOW) ][ , clpfoc := clpN/totnsamp ,]
+  
+  
+  #get snow data https://www.wrcc.dri.edu/cgi-bin/cliMAIN.pl?mn5435
+snow <- fread("scripts&data/data/input/MSP_snowfall_alltime.csv")
+  snow
+
+#add snow to plant abund data:
+  a[ , date := as.IDate(SURVEY_START, format = "%m/%d/%Y") , ]
+  a[ , year := year(date) , ]
+  
+  
+  a[snow, on = .(year = Winter_end_year ) , annual_snowfall := ANN]
+
+a[ ,.N , DOW][N>2, DOW]
+  
+a[ , , ]  
+
+# ggplot(a[DOW %in% a[ ,.N , DOW][N>2, DOW], , ], aes( annual_snowfall, clpfoc), )+
+#    geom_point()+
+#    geom_smooth(method = "lm")+
+#    facet_wrap(~DOW, scales = "free")
+
+a <- ggplot(a[DOW %in% a[ ,.N , DOW][N>2, DOW], , ], aes( annual_snowfall, clpfoc, group = as.factor(DOW)), )+
+  geom_point( aes(color = DOW) )+
+  geom_smooth(method = "lm", se = F, aes(color = DOW) )
+
+
+ggplotly(a)
+
+```
+
+So, from that plot I'd say the answer is no, a lake manager can't just use the MSP snowcover to assess effects on CLP. 
+
+
+
+
+
+
+

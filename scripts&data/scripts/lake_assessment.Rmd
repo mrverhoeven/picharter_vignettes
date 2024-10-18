@@ -1,0 +1,352 @@
+---
+title:  "lake assessment vignette for PI Charter"
+author: "Mike Verhoeven"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+#To-do: 
+2. Compare my results to old ones! Lake past, neighbors, watershed, state?
+
+
+# Prep WS
+```{r}
+#load libraries
+library(data.table)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(plotly)
+library(vegan)
+
+# Functions
+# https://stackoverflow.com/questions/7235657/fastest-way-to-replace-nas-in-a-large-data-table
+  f_dowle3natozeros = function(DT, x) {
+  # or by number (slightly faster than by name) :
+  for (j in x)
+    set(DT,which(is.na(DT[[j]])),j,"0")
+}
+
+
+
+
+#import Data
+redrockraw <- fread("scripts&data/data/input/RedRock_PI_30Aug2021 - Sheet1.csv")
+redrocknew <- fread("scripts&data/data/input/cleaned.csv")
+redrockold <- fread("scripts&data/data/input/PICharterRecord_27007600_2018-07-06 (1).csv")
+mitchell <- fread("scripts&data/data/input/PICharterRecord_27007000_2017-08-14 (1).csv")
+lotus <- fread("scripts&data/data/input/PICharterRecord_27007800_2023-08-23 (1).csv")
+
+  
+```
+
+
+#data explore
+```{r}
+#get the depths re-attached to cleaned data:
+redrocknew[redrockraw, on = .(sta_nbr = Site ) , depth_ft := Depth_meters*3.28084  ]
+# fix the NA vals in here
+dput(names(redrocknew))
+idvars = c("SUBMITTER_NAME", "SUBMITTER_EMAIL", "DOW", "SURVEY_START", 
+"RAKE_MAX", "SUBMIT_TIME", "SURVEYORS", "surveyor", "sta_nbr", 
+"latitude", "longitude", "survey_notes", "depth_ft")
+
+rrlong <- melt(redrocknew, 
+     id.vars = idvars,
+     variable.name = "TAXON",
+     value.name = "REL_ABUND")
+rrlong[ ,.N , REL_ABUND]
+rrlong<- rrlong[!REL_ABUND %in% c("3V", "1V", "2V", "Observed_in_area")]
+
+rrlong[is.na(REL_ABUND), REL_ABUND := 0]
+
+redrocknew <- 
+  dcast(rrlong, ... ~ TAXON, 
+      value.var = "REL_ABUND")
+
+#append redrock data to old stuff:
+
+redrock_all <- rbindlist(list(redrocknew, redrockold), use.names = T, fill = TRUE)
+redrock_all[ ,lake_name := NULL]
+redrock_all[ ,survey_notes := NULL]
+
+# fix the NA vals in here
+dput(names(redrock_all))
+taxacols = c("ceratophyllum_demersum", 
+"potamogeton_pusillus", "nymphaea_odorata", "lemna_trisulca", 
+"wolffia_sp", "elodea_canadensis", "stuckenia_pectinata", "nuphar_variegata", 
+"nelumbo_lutea", "chara_sp", "nitella_sp", "utricularia_macrorhiza", 
+"aquatic_moss", "heteranthera_dubia", "myriophyllum_spicatum", 
+"drepanocladus_sp", "potamogeton_crispus", "potamogeton_foliosus", 
+"myriophyllum_sibiricum", "lemna_minor", "potamogeton_zosteriformis", 
+"spirodela_polyrrhiza", "wolffia_columbiana", "najas_flexilis", 
+"potamogeton_nodosus", "utricularia_vulgaris", "sagittaria_sp", 
+"typha_sp")
+redrock_all[  , (taxacols) := lapply(.SD,as.numeric ) , .SDcols = taxacols ]
+
+setnafill(redrock_all, fill=0, cols = taxacols)
+
+rrlong_all <- melt(redrock_all, 
+     measure.vars = taxacols,
+     variable.name = "TAXON",
+     value.name = "REL_ABUND")
+
+#calculate a %occ by depth for these
+redrock_all[ , .N , .(round(depth_ft), SURVEY_START)]
+
+
+# sampling distribution
+ggplot(redrock_all[ , .N , .("Depth (feet)" = round(depth_ft), SURVEY_START)]
+, aes(`Depth (feet)`, N, group = as.factor(SURVEY_START)))+
+  geom_smooth(se = F, aes(color = as.factor(SURVEY_START)))
+# sampling distribution
+ggplot(redrock_all[ , .N , .(round(depth_ft), SURVEY_START)]
+, aes(round, N, group = as.factor(SURVEY_START)))+
+  geom_bar(stat = "identity")+
+  facet_wrap(~as.factor(SURVEY_START))
+
+# species abundances
+rrlong_all[ REL_ABUND > 0 , .N , .(as.factor(SURVEY_START), TAXON )][order(-N, as.factor)]
+
+
+
+
+
+
+
+
+```
+
+```{r}
+#' ## Survey Level Aggregation Chunk
+          rrlong_all[ , "NO_VEG_FOUND" := sum(REL_ABUND==0)==.N , .(sta_nbr, SURVEY_START)]
+          rrlong_all <- rrlong_all[!(NO_VEG_FOUND == F & REL_ABUND == 0)]
+          
+          #squash each no veg found row down to only one: 
+          rrlong_all[NO_VEG_FOUND==T, TAXON := NA]
+            sum(duplicated(rrlong_all))
+          rrlong_all <- rrlong_all[!duplicated(rrlong_all)]
+
+plants <- rrlong_all[ , , ]
+
+
+plants[ , SURVEY_ID := as.factor(year(SURVEY_START)) , ]
+
+  surveys <- plants[ , .(tot_n_samp = length(unique(sta_nbr)))  , SURVEY_ID ]
+  
+  #add richness to the surveys dataset
+  surveys[  , taxa_richness := #take the "taxon count" and subtract one if the survey includes NAs (see next two lines)
+              plants[ , length(unique(TAXON))   , SURVEY_ID ][ , V1]-# ("total richness", but counts NAs as a taxon) minus
+              plants[ , ifelse(sum(is.na(TAXON))== 0, 0, 1), SURVEY_ID][,V1],]#  (each survey get a 0 if no NAs or a 1 if contains NA's)
+  
+  # extent of vegetation in survey (proportion vegetated)
+  surveys <- merge(surveys,plants[!is.na(TAXON), .(n_points_vegetated=length(unique(sta_nbr))) , SURVEY_ID ],
+                   by = "SURVEY_ID", all.x = TRUE)[is.na(n_points_vegetated), n_points_vegetated := 0 ]
+  surveys[ , prop_veg := n_points_vegetated/tot_n_samp ,]
+  
+  
+  #create a plant observation matrix (species abund by survey)
+  survey_species_matrix <- dcast(plants[!is.na(TAXON) , .("count" = length(unique(sta_nbr))) , .(SURVEY_ID,TAXON)], SURVEY_ID ~ TAXON, value.var = "count", fill = 0) #note that this line creates the matrix ONLY for surveys that had species observations (~70 surveys had no species observed)
+
+  #diversity indicies:
+  # species names:
+  dput(names(survey_species_matrix))
+  taxacols <- c( "ceratophyllum_demersum", "potamogeton_pusillus", 
+"nymphaea_odorata", "lemna_trisulca", "wolffia_sp", "elodea_canadensis", 
+"stuckenia_pectinata", "nuphar_variegata", "nelumbo_lutea", "chara_sp", 
+"nitella_sp", "utricularia_macrorhiza", "aquatic_moss", "heteranthera_dubia", 
+"drepanocladus_sp", "potamogeton_crispus", "potamogeton_foliosus", 
+"myriophyllum_sibiricum", "lemna_minor", "potamogeton_zosteriformis", 
+"spirodela_polyrrhiza", "wolffia_columbiana", "najas_flexilis", 
+"potamogeton_nodosus", "utricularia_vulgaris", "sagittaria_sp", 
+"typha_sp")
+  
+  natcols <- c( "ceratophyllum_demersum", "potamogeton_pusillus", 
+"nymphaea_odorata", "lemna_trisulca", "wolffia_sp", "elodea_canadensis", 
+"stuckenia_pectinata", "nuphar_variegata", "nelumbo_lutea", "chara_sp", 
+"nitella_sp", "utricularia_macrorhiza", "aquatic_moss", "heteranthera_dubia", 
+"drepanocladus_sp",  "potamogeton_foliosus", 
+"myriophyllum_sibiricum", "lemna_minor", "potamogeton_zosteriformis", 
+"spirodela_polyrrhiza", "wolffia_columbiana", "najas_flexilis", 
+"potamogeton_nodosus", "utricularia_vulgaris", "sagittaria_sp", 
+"typha_sp")
+  
+  
+  
+  # total diversity
+  survey_species_matrix[ , shannon_div := diversity(.SD,index = "shannon"), .SDcols = taxacols ]
+  survey_species_matrix[ , simpsons_div := diversity(.SD,index = "invsimpson"), .SDcols = taxacols ]
+  
+  # native diversity
+  survey_species_matrix[ , shannon_div_nat := diversity(.SD,index = "shannon"), .SDcols = natcols  ]
+  survey_species_matrix[ , simpsons_div_nat := diversity(.SD,index = "invsimpson"), .SDcols = natcols ]
+  survey_species_matrix[simpsons_div_nat == Inf, simpsons_div_nat := 0]
+  
+  # native richness
+  survey_species_matrix[ ,  nat_richness := rowSums(survey_species_matrix[ , .SD, .SDcols = natcols] > 0), ]
+
+  # depth stats
+  # depth surveyed stats:
+  setnames(plants, old= "depth_ft", new = "DEPTH_FT" )
+  surveys <- surveys[plants[ !is.na(DEPTH_FT), .("max_depth_surveyed" = max(DEPTH_FT)) , SURVEY_ID], on = "SURVEY_ID" , ]
+  surveys <- surveys[plants[ !is.na(DEPTH_FT), .("min_depth_surveyed" = min(DEPTH_FT)) , SURVEY_ID], on = "SURVEY_ID" , ]
+  surveys <- surveys[plants[ !is.na(DEPTH_FT), .("mean_depth_surveyed" = mean(DEPTH_FT)) , SURVEY_ID], on = "SURVEY_ID" , ]
+  surveys <- surveys[plants[ !is.na(DEPTH_FT), .("median_depth_surveyed" = median(DEPTH_FT)) , SURVEY_ID], on = "SURVEY_ID" , ]
+  surveys <- surveys[plants[ !is.na(DEPTH_FT), .("IQR_depth_surveyed" = IQR(DEPTH_FT)) , SURVEY_ID], on = "SURVEY_ID" , ]
+  
+  #vegetated depths data
+  #max depth vegetated within survey:
+  
+  #some of these might warrant removal, depending on whats being done with the data
+  # plants[NO_VEG_FOUND == F & DEPTH_FT>50, length(sta_nbr) ,  .(SURVEY_DATASOURCE, DOW, SUBBASIN, SURVEY_DATE, LAKE_NAME)]
+  
+  plants[ NO_VEG_FOUND == FALSE & DEPTH_FT<50 , .("max_depth_vegetated" = max(DEPTH_FT)) , SURVEY_ID]
+  surveys <- merge( surveys , plants[ NO_VEG_FOUND == FALSE& DEPTH_FT<50 , .("max_depth_vegetated" = max(DEPTH_FT, na.rm = T)) , SURVEY_ID] , by = "SURVEY_ID" , all.x =TRUE )
+  #other depth vegetated stats:
+  surveys <- merge( surveys , plants[ NO_VEG_FOUND == FALSE& DEPTH_FT<50 , .("min_depth_vegetated" = min(DEPTH_FT, na.rm = T)) , SURVEY_ID], by = "SURVEY_ID" , all.x =TRUE )
+  surveys <- merge( surveys , plants[ NO_VEG_FOUND == FALSE& DEPTH_FT<50 , .("mean_depth_vegetated" = mean(DEPTH_FT, na.rm = T)) , SURVEY_ID], by = "SURVEY_ID" , all.x =TRUE )
+  surveys <- merge( surveys , plants[ NO_VEG_FOUND == FALSE& DEPTH_FT<50 , .("median_depth_vegetated" = median(DEPTH_FT, na.rm = T)) , SURVEY_ID], by = "SURVEY_ID" , all.x =TRUE )
+  surveys <- merge( surveys , plants[ NO_VEG_FOUND == FALSE& DEPTH_FT>50 , .("IQR_depth_vegetated" = IQR(DEPTH_FT, na.rm = T)) , SURVEY_ID], by = "SURVEY_ID" , all.x =TRUE )
+
+
+  # species matrix into survey data
+  #species matrix for surveys
+  surveys <- merge(surveys, survey_species_matrix, by = "SURVEY_ID", all.x = T)
+  f_dowle3natozeros(surveys, names(survey_species_matrix)) #the merge incorrectly assigns NAs for non obs... here we replace those with 0s
+  
+  # check work:
+  # summary(surveys[,1:17])
+  
+  #append survey data (basic data from plants db) to these
+  # names(plants)
+  surveys <- merge(plants[ , .("nobs" = .N) , .(SURVEY_ID, SURVEY_START, DOW) ],surveys,  by = "SURVEY_ID")
+  # summary(surveys)
+  # names(surveys) <- gsub(" ", "_", gsub( "\\(", "_", gsub( "\\)", "_", names(surveys))))
+
+  # # secchi data metrics 
+  # # rescue the secchi data from the plants db for these surveys
+  # 
+  # surveys[plants, Secchi_m := Secchi_m, on = "SURVEY_ID"]
+  # surveys[plants, Secchi_m_date := SECCHI_DATE, on = "SURVEY_ID"]
+  # 
+  # #OPTIONAL: merge in the geodata + lake data to the survey work
+  # surveys <- pwi_l[surveys, on = .(order_ID), mult = "first" ]  
+  #have to strip off the geometry to prevent failure in write to csv
+  # surveys[ ,geometry := NULL ,]
+
+  
+  # n samples within historical max depth
+  
+  # surveys <- merge(surveys,plants[!is.na(TAXON), .(alltime_maxvegdep = max(DEPTH_FT)) , .(DOW, SUBBASIN) ], by = c("DOW", "SUBBASIN"), all.x = TRUE) [is.na(alltime_maxvegdep), alltime_maxvegdep := 0  ]
+  # summary(surveys$alltime_maxvegdep)
+  # surveys[ , hist(alltime_maxvegdep) , ]
+  
+  
+  #for plants records with plants, whats the max depth by lake?
+  
+  #remove these cols if they exist (added this in troubleshooting, should kick warning, but have no effect on product)
+  plants[ ,alltime_maxvegdep := NULL]
+  plants[ ,survey_maxvegdep := NULL]
+  # Calculate max depth for non-NA TAXON records
+  max_depth <- plants[!is.na(TAXON) & DEPTH_FT < 50, .(alltime_maxvegdep = max(DEPTH_FT, na.rm = T)), by = .(DOW)]
+  # Merge the result back into the original data
+  plants <- merge(plants, max_depth, by = c("DOW"), all.x = TRUE)
+  
+  # Calculate max depth for non-NA TAXON records
+  max_depth <- plants[!is.na(TAXON) & DEPTH_FT < 50, .(survey_maxvegdep = max(DEPTH_FT, na.rm = T)), by = .(SURVEY_ID)]
+    # Merge the result back into the original data
+  plants <- merge(plants, max_depth, by = "SURVEY_ID", all.x = TRUE)
+  
+  plants[ , .N , .(alltime_maxvegdep, survey_maxvegdep, SURVEY_ID) , ]
+  
+  summary(plants[ , .N , .(alltime_maxvegdep, survey_maxvegdep, SURVEY_ID) , ])
+  
+  plants[is.na(survey_maxvegdep), .N , NO_VEG_FOUND ]
+  
+  
+  plot(data =  plants[, .N , .(alltime_maxvegdep, survey_maxvegdep, SURVEY_ID) , ],alltime_maxvegdep~survey_maxvegdep )
+  
+  # n_points within all time max vegetated depth
+  
+  plants[,
+         .(alltime_maxvegdep_n_samp = fifelse(is.na(first(alltime_maxvegdep)) , NA ,
+                                             length(sta_nbr))
+                ) , SURVEY_ID ]
+
+  surveys <- merge(surveys,
+                   plants[,
+                          .(alltime_maxvegdep_n_samp = fifelse(is.na(first(alltime_maxvegdep)) , NA ,
+                                                               length(
+                                                                 unique(ifelse(DEPTH_FT <= alltime_maxvegdep,sta_nbr,
+                                                                                    NA),
+                                                                             na.rm =T)
+                                                                      )
+                                                               ),
+                            alltime_maxvegdep = first(alltime_maxvegdep)) ,
+                          SURVEY_ID ],
+                   by = "SURVEY_ID", all.x = TRUE
+  )
+  
+  # n_points within survey specific max vegetated depth
+  surveys <- merge(surveys,
+                   plants[,
+                          .(survey_maxvegdep_n_samp = 
+                              fifelse(
+                                is.na(
+                                  first(survey_maxvegdep)) , NA ,
+                                length(
+                                  unique(
+                                    ifelse(DEPTH_FT <= survey_maxvegdep,
+                                           sta_nbr,NA
+                                    ),
+                                    na.rm =T
+                                  )
+                                )
+                              ), survey_maxvegdep = first(survey_maxvegdep
+                                                          )
+                            )
+                          , SURVEY_ID ],
+                   by = "SURVEY_ID", all.x = TRUE
+  )
+  
+  
+  plot( data = surveys, alltime_maxvegdep_n_samp ~ n_points_vegetated, xlab = "n points vegetated in this survey", ylab = "n points within all time max vegetated depth")
+  plot( data = surveys[ , .("propsamples_in_histmaxveg_depth" = (alltime_maxvegdep_n_samp/tot_n_samp),
+                            "prop_samples_vegetated" = (n_points_vegetated/tot_n_samp)
+                            ) , ], propsamples_in_histmaxveg_depth  ~ prop_samples_vegetated)
+  
+  
+  plot(data = surveys,  alltime_maxvegdep_n_samp ~ survey_maxvegdep_n_samp, xlab = "n points within survey specific vegetated depth", ylab = "n points within all time max vegetated depth")
+  plot(data = surveys, alltime_maxvegdep ~ survey_maxvegdep)
+
+  summary(surveys[ , .(alltime_maxvegdep, survey_maxvegdep, max_depth_vegetated, min_depth_vegetated)])
+  
+  surveys[taxa_richness == 0, .N ,  alltime_maxvegdep]
+  
+  
+  
+```
+
+
+
+# zip out some species specific pics for red rock
+
+```{r}
+
+redrock_summstats <- fwrite(surveys, file = "scripts&data/data/output/rrsurveystats.csv")
+
+ggplot(surveys, )
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
