@@ -52,26 +52,67 @@ snow <- fread("scripts&data/data/input/MSP_snowfall_alltime.csv")
   
   
   a[snow, on = .(year = Winter_end_year ) , annual_snowfall := ANN]
+  
+  a[ DOW %in% a[ ,.N , DOW][N>2, DOW], .N ,  DOW]
+  
+  a[ , county := substr(str_pad(as.character(DOW),pad = "0", side = "left", width = 8), start = 1, stop = 2) , ]
+  
+  a
+  
+  a <- a[ county %in% c("02", "27", "19", "62", "82", "10" ,"70")  ]
 
 a[ ,.N , DOW][N>2, DOW]
   
-a[ , , ]  
+a[ DOW %in% a[ ,.N , DOW][N>2, DOW] , hist(year) ]
 
-# ggplot(a[DOW %in% a[ ,.N , DOW][N>2, DOW], , ], aes( annual_snowfall, clpfoc), )+
-#    geom_point()+
-#    geom_smooth(method = "lm")+
-#    facet_wrap(~DOW, scales = "free")
 
-a <- ggplot(a[DOW %in% a[ ,.N , DOW][N>2, DOW], , ], aes( annual_snowfall, clpfoc, group = as.factor(DOW)), )+
+ggplot(a[DOW %in% a[year > 2015 ,.N , DOW][N>2, DOW] & year > 2015, , ] , aes( annual_snowfall, clpfoc), )+
+   geom_point()+
+   geom_smooth(method = "lm")+
+   facet_wrap(~DOW, scales = "free")
+
+summary(lm(clpfoc~annual_snowfall, data = a[DOW %in% a[,.N , DOW][N>2, DOW], , ]))
+
+
+plotpanels <- ggplot(a[DOW %in% a[ ,.N , DOW][N>2, DOW], , ], aes( annual_snowfall, clpfoc, group = as.factor(DOW)), )+
   geom_point( aes(color = DOW) )+
   geom_smooth(method = "lm", se = F, aes(color = DOW) )
 
 
-ggplotly(a)
+ggplotly(plotpanels)
 
 ```
 
-So, from that plot I'd say the answer is no, a lake manager can't just use the MSP snowcover to assess effects on CLP. 
+So, from that plot I'd say the answer is no, a lake manager can't just use the MSP snowcover to assess effects on CLP.
+
+
+To do list: 
+- exclude non 7co metro -DONE
+- run before 2016 - DONE
+- 
+
+# Figure for Vignette
+```{r}
+# make a background of "all data"
+
+ggplot(a , aes( annual_snowfall, clpfoc), )+
+   geom_point()+
+   geom_smooth(method = "lm")
+
+
+# show two lakes on top, one with increasing and one with decreasing snow relationships
+
+# decrese w/ snow
+ggplot(a[DOW %in% c("62005400"), , ] , aes( annual_snowfall, clpfoc), )+
+   geom_point()+
+   geom_smooth(method = "lm")
+
+
+
+# increase w/ snow
+ggplot(a[DOW %in% c("82010600"), , ] , aes( annual_snowfall, clpfoc), )+
+   geom_point()+
+   geom_smooth(method = "lm")
 
 
 
@@ -79,3 +120,27 @@ So, from that plot I'd say the answer is no, a lake manager can't just use the M
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```

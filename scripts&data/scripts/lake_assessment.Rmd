@@ -107,8 +107,46 @@ ggplot(redrock_all[ , .N , .(round(depth_ft), SURVEY_START)]
 
 # species abundances
 rrlong_all[ REL_ABUND > 0 , .N , .(as.factor(SURVEY_START), TAXON )][order(-N, as.factor)]
+a <- rrlong_all[ REL_ABUND > 0 , .("n_occ" = length(unique(sta_nbr)))  , .("Depth (feet)" = round(depth_ft), "Year" = as.factor(year(SURVEY_START)))]
+
+samps <- rrlong_all[ , .("n_samp" = length(unique(sta_nbr)))  , .("Depth (feet)" = round(depth_ft), "Year" = as.factor(year(SURVEY_START)))]
+
+samps[a , on = .(`Depth (feet)`,Year), n_occ := n_occ]
+
+samps[is.na(n_occ) , n_occ := 0 ]
 
 
+# vegetation distribution
+ggplot(samps,aes(`Depth (feet)`, n_occ/n_samp, group = Year))+
+  geom_bar(stat = "identity")+
+  facet_wrap(~Year)
+
+ggplot(samps,aes(`Depth (feet)`, n_occ/n_samp, group = Year))+
+  geom_smooth(aes(color = Year), se = F)
+
+
+
+
+# rake density(relative rake abunds)
+rrlong_all[ REL_ABUND > 0 , .N , .(as.factor(SURVEY_START), TAXON )][order(-N, as.factor)]
+a <- rrlong_all[ REL_ABUND > 0 , .("mean_abund" = mean(REL_ABUND))  , .(TAXON, "Depth (feet)" = round(depth_ft), "Year" = as.factor(year(SURVEY_START)))]
+
+summary(a)
+
+ggplot(a,aes(`Depth (feet)`, "mean_abund", group = Year))+
+  geom_bar(stat = "identity")+
+  facet_wrap(~Year)
+
+ggplot(a,aes(`Depth (feet)`, mean_abund, group = Year))+
+  geom_smooth(aes(color = Year), se = F)
+  
+ggplot(a,aes(`Depth (feet)`, mean_abund, group = Year))+
+  geom_smooth(aes(color = Year), se = F)+
+  facet_wrap(~TAXON, scales = "free")
+
+ggplot(a,aes(`Depth (feet)`, mean_abund, group = Year))+
+  geom_smooth(aes(color = Year), se = F)+
+  facet_wrap(~TAXON, scales = "free")
 
 
 
