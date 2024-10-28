@@ -136,6 +136,7 @@ summary(a)
 
 
 ggplot(a,aes(`Depth (feet)`, mean_abund, group = Year))+
+  # geom_point(aes(color = Year))+
   geom_smooth(aes(color = Year), se = F)
   
 ggplot(a[TAXON],aes(`Depth (feet)`, mean_abund, group = Year))+
