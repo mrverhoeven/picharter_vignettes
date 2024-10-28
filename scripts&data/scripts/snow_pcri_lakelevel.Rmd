@@ -52,7 +52,7 @@ snow <- fread("scripts&data/data/input/MSP_snowfall_alltime.csv")
   
   
   a[snow, on = .(year = Winter_end_year ) , annual_snowfall := ANN]
-  
+
   a[ DOW %in% a[ ,.N , DOW][N>2, DOW], .N ,  DOW]
   
   a[ , county := substr(str_pad(as.character(DOW),pad = "0", side = "left", width = 8), start = 1, stop = 2) , ]
@@ -74,10 +74,9 @@ ggplot(a[DOW %in% a[year > 2015 ,.N , DOW][N>2, DOW] & year > 2015, , ] , aes( a
 summary(lm(clpfoc~annual_snowfall, data = a[DOW %in% a[,.N , DOW][N>2, DOW], , ]))
 
 
-plotpanels <- ggplot(a[DOW %in% a[ ,.N , DOW][N>2, DOW], , ], aes( annual_snowfall, clpfoc, group = as.factor(DOW)), )+
-  geom_point( aes(color = DOW) )+
-  geom_smooth(method = "lm", se = F, aes(color = DOW) )
-
+plotpanels <- ggplot(a[DOW %in% a[ ,.N , DOW][N>2, DOW], , ], aes( annual_snowfall, clpfoc, group = as.factor(DOW)) )+
+  geom_point(aes(color = as.factor(DOW)))+
+  geom_smooth(aes(color = as.factor(DOW)), method = "lm", se = F)
 
 ggplotly(plotpanels)
 
@@ -102,7 +101,7 @@ ggplot(a , aes( annual_snowfall, clpfoc), )+
 
 # show two lakes on top, one with increasing and one with decreasing snow relationships
 
-# decrese w/ snow
+# decrease w/ snow
 ggplot(a[DOW %in% c("62005400"), , ] , aes( annual_snowfall, clpfoc), )+
    geom_point()+
    geom_smooth(method = "lm")
@@ -116,31 +115,12 @@ ggplot(a[DOW %in% c("82010600"), , ] , aes( annual_snowfall, clpfoc), )+
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ```
+
+So, from that plot I'd say the answer is no, a lake manager can't just use the MSP snowcover to assess effects on CLP. 
+
+
+
+
+
+
