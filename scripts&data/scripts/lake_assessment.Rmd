@@ -34,8 +34,8 @@ library(vegan)
 redrockraw <- fread("scripts&data/data/input/RedRock_PI_30Aug2021 - Sheet1.csv")
 redrocknew <- fread("scripts&data/data/input/cleaned.csv")
 redrockold <- fread("scripts&data/data/input/PICharterRecord_27007600_2018-07-06 (1).csv")
-mitchell <- fread("scripts&data/data/input/PICharterRecord_27007000_2017-08-14 (1).csv")
-lotus <- fread("scripts&data/data/input/PICharterRecord_27007800_2023-08-23 (1).csv")
+# mitchell <- fread("scripts&data/data/input/PICharterRecord_27007000_2017-08-14 (1).csv")
+# lotus <- fread("scripts&data/data/input/PICharterRecord_27007800_2023-08-23 (1).csv")
 
   
 ```
@@ -43,7 +43,7 @@ lotus <- fread("scripts&data/data/input/PICharterRecord_27007800_2023-08-23 (1).
 
 #data explore
 ```{r}
-#get the depths re-attached to cleaned data:
+#get the depths re-attached to cleaned data (the cleaned data chopped out the depths):
 redrocknew[redrockraw, on = .(sta_nbr = Site ) , depth_ft := Depth_meters*3.28084  ]
 # fix the NA vals in here
 dput(names(redrocknew))
@@ -136,12 +136,21 @@ summary(a)
 
 
 ggplot(a,aes(`Depth (feet)`, mean_abund, group = Year))+
-  # geom_point(aes(color = Year))+
-  geom_smooth(aes(color = Year), se = F)
-  
-ggplot(a[TAXON],aes(`Depth (feet)`, mean_abund, group = Year))+
   geom_smooth(aes(color = Year), se = F)+
-  facet_wrap(~TAXON, scales = "free")
+  theme_bw()+
+  scale_y_continuous(name = "Mean Rake Abundance")+
+  theme(axis.text = element_text( size=10),
+    axis.title.x = element_text(face="bold", size=15),
+        axis.title.y  = element_text(face = "bold", size=15),
+    legend.title = element_text( face="bold", size=15))+
+  guides(color  = guide_legend(position = "inside"))+
+  theme(legend.position.inside = c(0.85, 0.7),
+        plot.margin = margin(.1, 1, .1, .1, "cm"))
+
+#   
+# ggplot(a[TAXON],aes(`Depth (feet)`, mean_abund, group = Year))+
+#   geom_smooth(aes(color = Year), se = F)+
+#   facet_wrap(~TAXON, scales = "free")
 
 
 

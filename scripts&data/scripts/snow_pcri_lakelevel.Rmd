@@ -33,7 +33,7 @@ rawdata <- fread("scripts&data/data/input/PCRIsurveysPICharter2srt_sheet1rawdata
 #data explore
 ```{r}
 #see if we can re-generate ray's calc'd CLP values
-head(rawdata)
+# summary(rawdata)
   rawdata[ , .N , .(SURVEY_START, DOW) ]
   names(rawdata)[str_detect(names(rawdata), "pota")]
   
@@ -45,6 +45,9 @@ head(rawdata)
   #get snow data https://www.wrcc.dri.edu/cgi-bin/cliMAIN.pl?mn5435
 snow <- fread("scripts&data/data/input/MSP_snowfall_alltime.csv")
   snow
+  
+#convert to cm
+  snow[ , names(.SD) := lapply(.SD, function(x){x*2.54}), .SDcols = !c("Winter_end_year")]
 
 #add snow to plant abund data:
   a[ , date := as.IDate(SURVEY_START, format = "%m/%d/%Y") , ]
@@ -57,24 +60,25 @@ snow <- fread("scripts&data/data/input/MSP_snowfall_alltime.csv")
   
   a[ , county := substr(str_pad(as.character(DOW),pad = "0", side = "left", width = 8), start = 1, stop = 2) , ]
   
-  a
+  all_state <- a
+  rm(a)
   
-  a <- a[ county %in% c("02", "27", "19", "62", "82", "10" ,"70")  ]
+  metro <- all_state[ county %in% c("02", "27", "19", "62", "82", "10" ,"70")  ]
 
-a[ ,.N , DOW][N>2, DOW]
+metro[ ,.N , DOW][N>2, DOW]
   
-a[ DOW %in% a[ ,.N , DOW][N>2, DOW] , hist(year) ]
+metro[ DOW %in% metro[ ,.N , DOW][N>2, DOW] , hist(year) ]
 
 
-ggplot(a[DOW %in% a[year > 2015 ,.N , DOW][N>2, DOW] & year > 2015, , ] , aes( annual_snowfall, clpfoc), )+
+ggplot(metro[DOW %in% metro[year > 2015 ,.N , DOW][N>2, DOW] & year > 2015, , ] , aes( annual_snowfall, clpfoc), )+
    geom_point()+
    geom_smooth(method = "lm")+
    facet_wrap(~DOW, scales = "free")
 
-summary(lm(clpfoc~annual_snowfall, data = a[DOW %in% a[,.N , DOW][N>2, DOW], , ]))
+summary(lm(clpfoc~annual_snowfall, data = metro[DOW %in% metro[,.N , DOW][N>2, DOW], , ]))
 
 
-plotpanels <- ggplot(a[DOW %in% a[ ,.N , DOW][N>2, DOW], , ], aes( annual_snowfall, clpfoc, group = as.factor(DOW)) )+
+plotpanels <- ggplot(metro[DOW %in% metro[ ,.N , DOW][N>2, DOW], , ], aes( annual_snowfall, clpfoc, group = as.factor(DOW)) )+
   geom_point(aes(color = as.factor(DOW)))+
   geom_smooth(aes(color = as.factor(DOW)), method = "lm", se = F)
 
@@ -94,24 +98,38 @@ To do list:
 ```{r}
 # make a background of "all data"
 
-ggplot(a , aes( annual_snowfall, clpfoc), )+
-   geom_point()+
-   geom_smooth(method = "lm")
+ggplot(metro , aes( annual_snowfall, clpfoc), )+
+   geom_point()
 
+ggplot(metro, aes( annual_snowfall, clpfoc) )+
+  # geom_point(aes(color = as.factor(DOW)), alpha =.5)+
+  stat_smooth(geom='line', method = "lm" ,alpha=0.25, se = FALSE, aes(color = as.factor(DOW)), linewidth = 1.0)+
+  theme_bw()+
+  guides(color="none")+
+  geom_smooth(method = "lm", linewidth = 1.5)+
+    scale_y_continuous(name="Curlyleaf pondweed Abundnace") +
+  scale_x_continuous(name="Annual Snowfall in Region (cm)")+ 
+  theme(axis.text = element_text( size=10),
+    axis.title.x = element_text(face="bold", size=15),
+        axis.title.y  = element_text(face = "bold", size=15))
+
+summary(lm(clpfoc~annual_snowfall, data = metro)) # the unfiltered 
+summary(lm(clpfoc~annual_snowfall, data = metro[DOW %in% metro[year < 2016 ,.N , DOW][ ,DOW], , ]))
+summary(lm(clpfoc~annual_snowfall, data = metro[DOW %in% metro[year > 2015 ,.N , DOW][ ,DOW], , ]))
 
 # show two lakes on top, one with increasing and one with decreasing snow relationships
 
-# decrease w/ snow
-ggplot(a[DOW %in% c("62005400"), , ] , aes( annual_snowfall, clpfoc), )+
-   geom_point()+
-   geom_smooth(method = "lm")
-
-
-
-# increase w/ snow
-ggplot(a[DOW %in% c("82010600"), , ] , aes( annual_snowfall, clpfoc), )+
-   geom_point()+
-   geom_smooth(method = "lm")
+# # decrease w/ snow
+# ggplot(a[DOW %in% c("62005400"), , ] , aes( annual_snowfall, clpfoc), )+
+#    geom_point()+
+#    geom_smooth(method = "lm")
+# 
+# 
+# 
+# # increase w/ snow
+# ggplot(a[DOW %in% c("82010600"), , ] , aes( annual_snowfall, clpfoc), )+
+#    geom_point()+
+#    geom_smooth(method = "lm")
 
 
 
