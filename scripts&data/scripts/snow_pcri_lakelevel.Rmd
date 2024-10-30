@@ -42,8 +42,8 @@ rawdata <- fread("scripts&data/data/input/PCRIsurveysPICharter2srt_sheet1rawdata
   a <- rawdata[ , .("survey_ident"= .GRP, "totnsamp" = .N, "clpN" = sum(potamogeton_crispus >= 1, na.rm = T), "lat_median" = median(latitude, na.rm = T), "lon_median" = median(longitude, na.rm = T)) ,   , .(SURVEY_START, DOW) ][ , clpfoc := clpN/totnsamp ,]
   
   
-  #get snow data https://www.wrcc.dri.edu/cgi-bin/cliMAIN.pl?mn5435
-snow <- fread("scripts&data/data/input/MSP_snowfall_alltime.csv")
+  #get snow data https://www.dnr.state.mn.us/climate/historical/acis_stn_data_monthly_table.html?sid=mspthr&sname=Twin%20Cities%20Area&sdate=1884-07-01&edate=por&element=snow&span=season&counts=no
+snow <- fread("scripts&data/data/input/MSP_area_snow.csv")
   snow
   
 #convert to cm
@@ -69,6 +69,12 @@ metro[ ,.N , DOW][N>2, DOW]
   
 metro[ DOW %in% metro[ ,.N , DOW][N>2, DOW] , hist(year) ]
 
+
+metro[ , length(unique(year(date))) , DOW ]
+
+metro[ , length(unique(year(date))) , DOW ][ , summary(V1) , ]
+
+metro[ ,summary(year(date)) , ]
 
 ggplot(metro[DOW %in% metro[year > 2015 ,.N , DOW][N>2, DOW] & year > 2015, , ] , aes( annual_snowfall, clpfoc), )+
    geom_point()+
@@ -107,7 +113,7 @@ ggplot(metro, aes( annual_snowfall, clpfoc) )+
   theme_bw()+
   guides(color="none")+
   geom_smooth(method = "lm", linewidth = 1.5)+
-    scale_y_continuous(name="Curlyleaf pondweed Abundnace") +
+    scale_y_continuous(name="Curlyleaf pondweed Abundance") +
   scale_x_continuous(name="Annual Snowfall in Region (cm)")+ 
   theme(axis.text = element_text( size=10),
     axis.title.x = element_text(face="bold", size=15),

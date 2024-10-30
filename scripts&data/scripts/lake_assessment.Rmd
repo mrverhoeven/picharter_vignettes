@@ -148,9 +148,9 @@ ggplot(a,aes(`Depth (feet)`, mean_abund, group = Year))+
         plot.margin = margin(.1, 1, .1, .1, "cm"))
 
 #   
-# ggplot(a[TAXON],aes(`Depth (feet)`, mean_abund, group = Year))+
-#   geom_smooth(aes(color = Year), se = F)+
-#   facet_wrap(~TAXON, scales = "free")
+ggplot(a,aes(`Depth (feet)`, mean_abund, group = Year))+
+  geom_smooth(aes(color = Year), se = F)+
+  facet_wrap(~TAXON, scales = "free")
 
 
 
