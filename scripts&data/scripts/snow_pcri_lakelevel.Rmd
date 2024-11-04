@@ -6,11 +6,7 @@ output: html_document
 ---
 
 #To-do: 
-1. Snowcover effects on clp abund for all lakes where the DB has multiple CLP projects
-- non-local winter data
-- 
-
-2. Compare my results to old ones! Lake past, neighbors, watershed, state?
+1. Drop multiple per year obs via taking max CLP
 
 
 # Prep WS
@@ -123,20 +119,82 @@ summary(lm(clpfoc~annual_snowfall, data = metro)) # the unfiltered
 summary(lm(clpfoc~annual_snowfall, data = metro[DOW %in% metro[year < 2016 ,.N , DOW][ ,DOW], , ]))
 summary(lm(clpfoc~annual_snowfall, data = metro[DOW %in% metro[year > 2015 ,.N , DOW][ ,DOW], , ]))
 
-# show two lakes on top, one with increasing and one with decreasing snow relationships
+```
 
-# # decrease w/ snow
-# ggplot(a[DOW %in% c("62005400"), , ] , aes( annual_snowfall, clpfoc), )+
-#    geom_point()+
-#    geom_smooth(method = "lm")
-# 
-# 
-# 
-# # increase w/ snow
-# ggplot(a[DOW %in% c("82010600"), , ] , aes( annual_snowfall, clpfoc), )+
-#    geom_point()+
-#    geom_smooth(method = "lm")
+```{r}
+# For multiple occ ests per year
+metro[ , .N , .(DOW, year(date)) ][ ,hist(N) ,]
+setorder(metro,-clpfoc) #order dt by increasing CLP
+metro[ , ann_abund_rank := 1:.N   ,  .(DOW, year) ] # tag ranked order of abunds within year
 
+metro_annmax <- metro[ann_abund_rank==1, , ]
+
+plotpanels <- ggplot(metro_annmax[DOW %in% metro_annmax[ ,.N , DOW][N>2, DOW], , ], aes( annual_snowfall, clpfoc, group = as.factor(DOW)) )+
+  geom_point(aes(color = as.factor(DOW)))+
+  geom_smooth(aes(color = as.factor(DOW)), method = "lm", se = F)
+
+ggplotly(plotpanels)
+
+# make a background of "all data"
+
+ggplot(metro_annmax , aes( annual_snowfall, clpfoc), )+
+   geom_point()
+
+ggplot(metro_annmax, aes( annual_snowfall, clpfoc) )+
+  # geom_point(aes(color = as.factor(DOW)), alpha =.5)+
+  stat_smooth(geom='line', method = "lm" ,alpha=0.25, se = FALSE, aes(color = as.factor(DOW)), linewidth = 1.0)+
+  theme_bw()+
+  guides(color="none")+
+  geom_smooth(method = "lm", linewidth = 1.5)+
+    scale_y_continuous(name="Curlyleaf pondweed Abundance") +
+  scale_x_continuous(name="Annual Snowfall in Region (cm)")+ 
+  theme(axis.text = element_text( size=10),
+    axis.title.x = element_text(face="bold", size=15),
+        axis.title.y  = element_text(face = "bold", size=15))
+
+summary(lm(clpfoc~annual_snowfall, data = metro_annmax)) # the unfiltered 
+summary(lm(clpfoc~annual_snowfall, data = metro_annmax[DOW %in% metro_annmax[year < 2016 ,.N , DOW][ ,DOW], , ]))
+summary(lm(clpfoc~annual_snowfall, data = metro_annmax[DOW %in% metro_annmax[year > 2015 ,.N , DOW][ ,DOW], , ]))
+
+
+#generate a lake specific R2 and p val
+lake_ests <- data.table(DOW = metro_annmax[ , .N , DOW][N>2, DOW])
+for (i in metro_annmax[ , .N , DOW][N>2, DOW]) {
+  # i = 27002800
+  #snow slope
+  lake_iter <- lm(
+    clpfoc~annual_snowfall, data = metro_annmax[DOW == i]
+  ) 
+  lake_ests[ DOW == i, snow_slope :=  summary(lake_iter)$coefficients[2,1] ]
+  #snow_p
+  lake_ests[ DOW == i, snow_pval :=  summary(lake_iter)$coefficients[2,4] ]
+  # R-squared
+  lake_ests[ DOW == i, snow_Rsq :=  summary(lake_iter)$r.squared ]
+  #mean_clp
+  lake_ests[ DOW == i, mean_clp :=  metro_annmax[DOW == i, mean(clpfoc) , ] ]  
+  
+  
+}
+
+ggplot(lake_ests, aes(snow_slope) )+
+  geom_histogram( aes(fill = snow_Rsq))
+
+
+ggplot(lake_ests, aes(snow_slope, snow_Rsq) )+
+  geom_point()
+ggplot(lake_ests, aes(snow_slope, snow_pval) )+
+  geom_point( )
+
+
+lake_ests[snow_Rsq>.5 ][order(snow_slope)]
+
+
+metro_slopes <- metro_annmax[lake_ests, on = .(DOW)]
+
+
+#export table of lakes with a snow R2 greater than .5
+# 
+# fwrite(lake_ests[snow_Rsq>.5 ][order(snow_slope)], file = "scripts&data/data/output/snow_pred_lakes.csv")
 
 
 ```
